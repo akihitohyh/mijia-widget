@@ -57,9 +57,11 @@
    ```
 
 2. **安装依赖**
-   ```bash
-   pip install -r requirements.txt
-   ```
+   - 双击运行 `获取依赖.bat`
+   - 或在命令行运行：
+     ```bash
+     pip install -r requirements.txt
+     ```
 
 3. **双击 `启动插件.bat`**
 
