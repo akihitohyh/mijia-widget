@@ -731,6 +731,14 @@ class DeviceCard(QFrame):
         status_label.setStyleSheet(f"color: {status_color}; font-size: 11px;")
         header.addWidget(status_label)
 
+        # 如果是空调，显示开关状态
+        if self.is_ac_device() and is_online:
+            self.ac_power_label = QLabel("")
+            self.ac_power_label.setStyleSheet("font-size: 11px;")
+            header.addWidget(self.ac_power_label)
+            # 立即获取开关状态
+            self.update_ac_power_status()
+
         # 如果是插座，添加选项按钮
         if self.is_plug_device() and is_online:
             options_btn = QPushButton("选项")
@@ -739,13 +747,13 @@ class DeviceCard(QFrame):
             options_btn.clicked.connect(self.show_options)
             header.addWidget(options_btn)
 
-        # 如果是空调，添加控制按钮
+        # 如果是空调，添加开关按钮
         if self.is_ac_device() and is_online:
-            control_btn = QPushButton("控制")
-            control_btn.setObjectName("detailBtn")
-            control_btn.setFixedSize(35, 20)
-            control_btn.clicked.connect(self.show_ac_control)
-            header.addWidget(control_btn)
+            self.ac_switch_btn = QPushButton("开关")
+            self.ac_switch_btn.setObjectName("detailBtn")
+            self.ac_switch_btn.setFixedSize(35, 20)
+            self.ac_switch_btn.clicked.connect(self.toggle_ac_power)
+            header.addWidget(self.ac_switch_btn)
 
         layout.addLayout(header)
 
@@ -871,10 +879,52 @@ class DeviceCard(QFrame):
         if self.on_options:
             self.on_options(self.device, self.options, self.set_options)
 
-    def show_ac_control(self):
-        """显示空调控制对话框"""
-        dialog = ACControlDialog(self.device, self.client, self)
-        dialog.exec()
+    def update_ac_power_status(self):
+        """更新空调开关状态显示"""
+        if not self.client:
+            return
+        try:
+            status = self.client.get_ac_status(self.did)
+            if status and 'power' in status:
+                power = status['power']
+                if power:
+                    self.ac_power_label.setText("● 开启")
+                    self.ac_power_label.setStyleSheet("color: #4caf50; font-size: 11px;")  # 绿色
+                else:
+                    self.ac_power_label.setText("● 关闭")
+                    self.ac_power_label.setStyleSheet("color: #888888; font-size: 11px;")  # 灰色
+            else:
+                self.ac_power_label.setText("")
+        except Exception as e:
+            print(f"获取空调状态失败: {e}")
+            self.ac_power_label.setText("")
+
+    def toggle_ac_power(self):
+        """切换空调电源"""
+        if not self.client:
+            return
+        try:
+            # 先获取当前状态
+            status = self.client.get_ac_status(self.did)
+            current_power = status.get('power', False) if status else False
+
+            # 切换状态
+            new_power = not current_power
+            result = self.client.set_ac_property(self.did, 'power', new_power)
+
+            if result:
+                # 更新显示
+                if new_power:
+                    self.ac_power_label.setText("● 开启")
+                    self.ac_power_label.setStyleSheet("color: #4caf50; font-size: 11px;")
+                else:
+                    self.ac_power_label.setText("● 关闭")
+                    self.ac_power_label.setStyleSheet("color: #888888; font-size: 11px;")
+                print(f"空调 {'开启' if new_power else '关闭'} 成功")
+            else:
+                print(f"空调 {'开启' if new_power else '关闭'} 失败")
+        except Exception as e:
+            print(f"切换空调电源失败: {e}")
 
 
 class ACControlDialog(QDialog):

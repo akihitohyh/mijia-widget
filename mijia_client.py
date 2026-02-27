@@ -440,7 +440,6 @@ class MijiaClient:
 
                                     if res.get('code') == 0:
                                         value = res.get('value')
-                                        print(f"DEBUG get_ac_status: siid={siid}, piid={piid}, key={key}, raw_value={value}, type={type(value)}")
                                         if key == 'mode':
                                             mode_map = {0: 'auto', 1: 'cool', 2: 'heat', 3: 'dry', 4: 'fan'}
                                             result[key] = mode_map.get(value, 'auto')
@@ -452,7 +451,6 @@ class MijiaClient:
                                             if isinstance(value, (int, float)) and 10 <= value <= 40:
                                                 result[key] = int(value)
                                             else:
-                                                print(f"DEBUG: 温度值 {value} 不在合理范围，跳过")
                                                 continue
                                         else:
                                             result[key] = value
@@ -481,40 +479,8 @@ class MijiaClient:
 
         result = {}
         try:
-            # 尝试获取功率
-            for siid, piid in [(4, 1), (4, 2), (11, 1), (11, 2), (3, 1), (3, 2), (2, 8), (2, 9)]:
-                try:
-                    res = self.api.get_devices_prop({
-                        "did": did,
-                        "siid": siid,
-                        "piid": piid
-                    })
-                    if res.get('code') == 0:
-                        value = res.get('value')
-                        print(f"DEBUG power: siid={siid}, piid={piid}, value={value}")
-                        if value is not None and isinstance(value, (int, float)) and value >= 50:  # 空调功率通常大于50W
-                            result['power_w'] = float(value)
-                            print(f"DEBUG: 选中功率值 {value}W")
-                            break
-                except Exception as e:
-                    print(f"DEBUG power error: siid={siid}, piid={piid}, {e}")
-
-            # 尝试获取室内温度
-            for siid, piid in [(4, 2), (4, 3), (3, 4), (3, 3), (2, 3), (2, 5)]:
-                try:
-                    res = self.api.get_devices_prop({
-                        "did": did,
-                        "siid": siid,
-                        "piid": piid
-                    })
-                    if res.get('code') == 0:
-                        value = res.get('value')
-                        print(f"DEBUG room_temp: siid={siid}, piid={piid}, value={value}")
-                        if value is not None and isinstance(value, (int, float)) and 10 <= value <= 40:
-                            result['room_temp'] = int(value)
-                            break
-                except Exception as e:
-                    print(f"DEBUG room_temp error: siid={siid}, piid={piid}, {e}")
+            # 简化：只获取功率和室内温度（如果用户需要）
+            # 注意：当前版本只保留开关功能，此方法保留但不主动调用
 
             # 空调通常不支持用电统计API，跳过此步骤
             # 如果后续发现某些型号支持，可以在这里添加
