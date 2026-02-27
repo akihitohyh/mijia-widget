@@ -29,7 +29,7 @@ def should_exclude(path):
 
 def create_release():
     """创建7z发布包"""
-    version = "v1.0.0"
+    version = "v1.0.1"
     output_name = f"mijia-widget-{version}.7z"
 
     print(f"正在创建发布包: {output_name}")

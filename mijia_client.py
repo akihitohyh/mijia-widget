@@ -216,3 +216,112 @@ class MijiaClient:
             print(f"获取开关状态失败: {e}")
 
         return result if result else None
+
+    def set_ac_property(self, did: str, property_name: str, value) -> bool:
+        """设置空调属性（开关、温度、模式、风速）
+
+        Args:
+            did: 设备ID
+            property_name: 属性名 ('power', 'temperature', 'mode', 'fan_speed')
+            value: 属性值
+
+        Returns:
+            bool: 是否设置成功
+        """
+        if not self.api:
+            print("API未初始化")
+            return False
+
+        try:
+            # 空调MIOT协议（不同型号可能有差异，这里是通用实现）
+            # 服务2通常是空调主服务
+            property_map = {
+                'power': {'siid': 2, 'piid': 1},      # 开关
+                'temperature': {'siid': 2, 'piid': 2}, # 温度
+                'mode': {'siid': 2, 'piid': 3},        # 模式
+                'fan_speed': {'siid': 2, 'piid': 4},   # 风速
+            }
+
+            prop = property_map.get(property_name)
+            if not prop:
+                print(f"未知属性: {property_name}")
+                return False
+
+            # 转换值为小米API格式
+            if property_name == 'power':
+                value = True if value else False
+            elif property_name == 'temperature':
+                value = int(value)
+            elif property_name == 'mode':
+                mode_map = {'cool': 0, 'heat': 1, 'dry': 2, 'fan': 3, 'auto': 4}
+                value = mode_map.get(value, 4)
+            elif property_name == 'fan_speed':
+                fan_map = {'auto': 0, 'low': 1, 'medium': 2, 'high': 3, 'strong': 4}
+                value = fan_map.get(value, 0)
+
+            result = self.api.set_devices_prop({
+                "did": did,
+                "siid": prop['siid'],
+                "piid": prop['piid'],
+                "value": value
+            })
+
+            if result.get('code') == 0:
+                print(f"设置成功: {property_name} = {value}")
+                return True
+            else:
+                print(f"设置失败: {result}")
+                return False
+
+        except Exception as e:
+            print(f"设置空调属性失败: {e}")
+            return False
+
+    def get_ac_status(self, did: str) -> Optional[Dict[str, Any]]:
+        """获取空调当前状态
+
+        Returns:
+            dict: 包含power(开关), temperature(温度), mode(模式), fan_speed(风速)
+        """
+        if not self.api:
+            return None
+
+        result = {}
+        try:
+            # 获取开关状态
+            power_res = self.api.get_devices_prop({
+                "did": did, "siid": 2, "piid": 1
+            })
+            if power_res.get('code') == 0:
+                result['power'] = power_res.get('value', False)
+
+            # 获取温度设定
+            temp_res = self.api.get_devices_prop({
+                "did": did, "siid": 2, "piid": 2
+            })
+            if temp_res.get('code') == 0:
+                result['temperature'] = temp_res.get('value', 26)
+
+            # 获取模式
+            mode_res = self.api.get_devices_prop({
+                "did": did, "siid": 2, "piid": 3
+            })
+            if mode_res.get('code') == 0:
+                mode_val = mode_res.get('value', 4)
+                mode_map = {0: 'cool', 1: 'heat', 2: 'dry', 3: 'fan', 4: 'auto'}
+                result['mode'] = mode_map.get(mode_val, 'auto')
+
+            # 获取风速
+            fan_res = self.api.get_devices_prop({
+                "did": did, "siid": 2, "piid": 4
+            })
+            if fan_res.get('code') == 0:
+                fan_val = fan_res.get('value', 0)
+                fan_map = {0: 'auto', 1: 'low', 2: 'medium', 3: 'high', 4: 'strong'}
+                result['fan_speed'] = fan_map.get(fan_val, 'auto')
+
+            return result if result else None
+
+        except Exception as e:
+            print(f"获取空调状态失败: {e}")
+            return None

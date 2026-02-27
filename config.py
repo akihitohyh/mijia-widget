@@ -92,6 +92,10 @@ DEVICE_NAME_MAP = {
     'Mi TV': '小米电视',
     'Xiaomi Projector': '小米投影仪',
     'Mi Projector': '米家投影仪',
+    # 空调设备
+    'Air Conditioner': '空调',
+    'Xiaomi Air Conditioner': '小米空调',
+    'Mi Air Conditioner': '米家空调',
 }
 
 def get_device_display_name(name: str) -> str:

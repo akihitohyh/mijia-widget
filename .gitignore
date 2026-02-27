@@ -36,6 +36,9 @@ auth.json
 *.key
 *.pem
 
+# Claude Code 配置
+.claude/
+
 # 临时文件
 *.tmp
 *.bak

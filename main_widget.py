@@ -24,6 +24,8 @@ from config import (
     get_device_display_name
 )
 
+VERSION = "v1.0.1"
+
 
 class SettingsDialog(QDialog):
     """设置面板对话框"""
@@ -673,6 +675,12 @@ class DeviceCard(QFrame):
         name = self.device.get('name', '').lower()
         return 'plug' in model or '插座' in name or 'plug' in name
 
+    def is_ac_device(self) -> bool:
+        """判断是否为空调设备"""
+        model = self.device.get('model', '').lower()
+        name = self.device.get('name', '').lower()
+        return 'air' in model or 'ac' in model or '空调' in name
+
     def setup_ui(self):
         self.setObjectName("deviceCard")
         self.setStyleSheet(f"""
@@ -730,6 +738,14 @@ class DeviceCard(QFrame):
             options_btn.setFixedSize(35, 20)
             options_btn.clicked.connect(self.show_options)
             header.addWidget(options_btn)
+
+        # 如果是空调，添加控制按钮
+        if self.is_ac_device() and is_online:
+            control_btn = QPushButton("控制")
+            control_btn.setObjectName("detailBtn")
+            control_btn.setFixedSize(35, 20)
+            control_btn.clicked.connect(self.show_ac_control)
+            header.addWidget(control_btn)
 
         layout.addLayout(header)
 
@@ -855,6 +871,256 @@ class DeviceCard(QFrame):
         if self.on_options:
             self.on_options(self.device, self.options, self.set_options)
 
+    def show_ac_control(self):
+        """显示空调控制对话框"""
+        dialog = ACControlDialog(self.device, self.client, self)
+        dialog.exec()
+
+
+class ACControlDialog(QDialog):
+    """空调控制对话框"""
+
+    def __init__(self, device: Dict, client: MijiaClient, parent=None):
+        super().__init__(parent)
+        self.device = device
+        self.client = client
+        self.did = device.get('did', '')
+
+        display_name = get_device_display_name(device.get('name', '空调'))
+        self.setWindowTitle(f"{display_name} - 控制面板")
+        self.setFixedSize(280, 350)
+
+        self.setWindowFlags(
+            Qt.WindowType.Dialog |
+            Qt.WindowType.WindowCloseButtonHint |
+            Qt.WindowType.WindowTitleHint
+        )
+        self.setModal(True)
+
+        self.setup_ui()
+        self.load_status()
+
+    def setup_ui(self):
+        """设置UI"""
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {STYLE['bg_color']};
+            }}
+            QLabel {{
+                color: {STYLE['text_color']};
+                font-family: "{STYLE['font_family']}";
+            }}
+            QPushButton {{
+                background-color: {STYLE['accent_color']};
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 15px;
+                font-family: "{STYLE['font_family']}";
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: #0095cc;
+            }}
+            QPushButton#powerBtn {{
+                background-color: #4caf50;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 10px 20px;
+            }}
+            QPushButton#powerBtn:hover {{
+                background-color: #45a049;
+            }}
+            QPushButton#powerBtn[off="true"] {{
+                background-color: #f44336;
+            }}
+            QPushButton#powerBtn[off="true"]:hover {{
+                background-color: #da190b;
+            }}
+            QSlider::groove:horizontal {{
+                height: 8px;
+                background: {STYLE['card_bg']};
+                border-radius: 4px;
+            }}
+            QSlider::handle:horizontal {{
+                background: {STYLE['accent_color']};
+                width: 18px;
+                border-radius: 9px;
+            }}
+            QComboBox {{
+                background-color: {STYLE['card_bg']};
+                color: {STYLE['text_color']};
+                border: 1px solid {STYLE['accent_color']};
+                border-radius: 5px;
+                padding: 5px;
+            }}
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # 标题
+        title = QLabel("❄️ 空调控制")
+        title.setFont(QFont(STYLE['font_family'], 16, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {STYLE['accent_color']};")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+
+        # 电源按钮
+        self.power_btn = QPushButton("🔌 电源")
+        self.power_btn.setObjectName("powerBtn")
+        self.power_btn.clicked.connect(self.toggle_power)
+        layout.addWidget(self.power_btn)
+
+        # 温度控制
+        temp_layout = QHBoxLayout()
+        temp_label = QLabel("温度:")
+        temp_layout.addWidget(temp_label)
+
+        self.temp_slider = QSlider(Qt.Orientation.Horizontal)
+        self.temp_slider.setMinimum(16)
+        self.temp_slider.setMaximum(30)
+        self.temp_slider.setValue(26)
+        self.temp_slider.valueChanged.connect(self.on_temp_changed)
+        temp_layout.addWidget(self.temp_slider)
+
+        self.temp_display = QLabel("26°C")
+        self.temp_display.setFixedWidth(40)
+        temp_layout.addWidget(self.temp_display)
+
+        layout.addLayout(temp_layout)
+
+        # 模式选择
+        mode_layout = QHBoxLayout()
+        mode_label = QLabel("模式:")
+        mode_layout.addWidget(mode_label)
+
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItems(["制冷", "制热", "除湿", "送风", "自动"])
+        self.mode_combo.currentTextChanged.connect(self.on_mode_changed)
+        mode_layout.addWidget(self.mode_combo)
+
+        layout.addLayout(mode_layout)
+
+        # 风速选择
+        fan_layout = QHBoxLayout()
+        fan_label = QLabel("风速:")
+        fan_layout.addWidget(fan_label)
+
+        self.fan_combo = QComboBox()
+        self.fan_combo.addItems(["自动", "低风", "中风", "高风", "强力"])
+        self.fan_combo.currentTextChanged.connect(self.on_fan_changed)
+        fan_layout.addWidget(self.fan_combo)
+
+        layout.addLayout(fan_layout)
+
+        # 状态显示
+        self.status_label = QLabel("正在获取状态...")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet(f"color: {STYLE['accent_color']}; font-size: 11px;")
+        layout.addWidget(self.status_label)
+
+        layout.addStretch()
+
+        # 关闭按钮
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn)
+
+    def load_status(self):
+        """加载空调当前状态"""
+        try:
+            status = self.client.get_ac_status(self.did)
+            if status:
+                # 更新电源按钮
+                power = status.get('power', False)
+                if power:
+                    self.power_btn.setProperty("off", "false")
+                    self.power_btn.setText("🔌 电源 (开)")
+                else:
+                    self.power_btn.setProperty("off", "true")
+                    self.power_btn.setText("🔌 电源 (关)")
+
+                # 更新温度
+                temp = status.get('temperature', 26)
+                self.temp_slider.setValue(temp)
+                self.temp_display.setText(f"{temp}°C")
+
+                # 更新模式
+                mode = status.get('mode', 'auto')
+                mode_map_rev = {'cool': '制冷', 'heat': '制热', 'dry': '除湿', 'fan': '送风', 'auto': '自动'}
+                self.mode_combo.setCurrentText(mode_map_rev.get(mode, '自动'))
+
+                # 更新风速
+                fan = status.get('fan_speed', 'auto')
+                fan_map_rev = {'auto': '自动', 'low': '低风', 'medium': '中风', 'high': '高风', 'strong': '强力'}
+                self.fan_combo.setCurrentText(fan_map_rev.get(fan, '自动'))
+
+                self.status_label.setText("已连接 - 同步成功")
+            else:
+                self.status_label.setText("已连接 - 使用默认设置")
+        except Exception as e:
+            self.status_label.setText(f"获取状态失败: {str(e)[:30]}")
+
+    def on_temp_changed(self, value):
+        """温度改变"""
+        self.temp_display.setText(f"{value}°C")
+        # 发送温度设置命令
+        self.set_ac_property('temperature', value)
+
+    def on_mode_changed(self, mode_text):
+        """模式改变"""
+        mode_map = {
+            "制冷": "cool",
+            "制热": "heat",
+            "除湿": "dry",
+            "送风": "fan",
+            "自动": "auto"
+        }
+        mode = mode_map.get(mode_text, "auto")
+        self.set_ac_property('mode', mode)
+
+    def on_fan_changed(self, fan_text):
+        """风速改变"""
+        fan_map = {
+            "自动": "auto",
+            "低风": "low",
+            "中风": "medium",
+            "高风": "high",
+            "强力": "strong"
+        }
+        fan = fan_map.get(fan_text, "auto")
+        self.set_ac_property('fan_speed', fan)
+
+    def toggle_power(self):
+        """切换电源"""
+        # 这里可以添加电源切换逻辑
+        current_state = self.power_btn.property("off")
+        if current_state == "true":
+            self.power_btn.setProperty("off", "false")
+            self.power_btn.setText("🔌 电源 (开)")
+            self.set_ac_property('power', True)
+        else:
+            self.power_btn.setProperty("off", "true")
+            self.power_btn.setText("🔌 电源 (关)")
+            self.set_ac_property('power', False)
+        self.power_btn.style().unpolish(self.power_btn)
+        self.power_btn.style().polish(self.power_btn)
+
+    def set_ac_property(self, property_name: str, value):
+        """设置空调属性"""
+        try:
+            print(f"设置空调 {self.did}: {property_name} = {value}")
+            result = self.client.set_ac_property(self.did, property_name, value)
+            if result:
+                self.status_label.setText(f"设置成功: {property_name}")
+            else:
+                self.status_label.setText(f"设置失败: {property_name}")
+        except Exception as e:
+            self.status_label.setText(f"设置失败: {str(e)[:30]}")
+            print(f"设置空调属性失败: {e}")
+
 
 class MijiaWidget(QWidget):
     """米家桌面插件主窗口"""
@@ -884,7 +1150,7 @@ class MijiaWidget(QWidget):
 
     def setup_ui(self):
         """设置UI界面"""
-        self.setWindowTitle("米家设备")
+        self.setWindowTitle(f"米家设备 {VERSION}")
         self.setMinimumSize(300, 400)
         self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
 
@@ -1124,7 +1390,7 @@ class MijiaWidget(QWidget):
         tray_pixmap = QPixmap(64, 64)
         tray_pixmap.fill(QColor(STYLE['accent_color']))
         self.tray_icon.setIcon(QIcon(tray_pixmap))
-        self.tray_icon.setToolTip("米家桌面插件")
+        self.tray_icon.setToolTip(f"米家桌面插件 {VERSION}")
 
         # 创建托盘菜单
         tray_menu = QMenu()
