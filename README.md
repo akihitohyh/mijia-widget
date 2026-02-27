@@ -50,7 +50,8 @@
 
 1. **克隆或下载项目**
    ```bash
-   cd c:\pythonp\mijia
+   git clone https://github.com/akihitohyh/mijia-widget.git
+   cd mijia-widget
    ```
 
 2. **安装依赖**
