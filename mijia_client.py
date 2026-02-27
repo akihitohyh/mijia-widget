@@ -233,55 +233,59 @@ class MijiaClient:
             return False
 
         try:
-            # 空调MIOT协议（不同型号可能有差异，这里是通用实现）
-            # 服务2通常是空调主服务
-            property_map = {
-                'power': {'siid': 2, 'piid': 1},      # 开关
-                'temperature': {'siid': 2, 'piid': 2}, # 温度
-                'mode': {'siid': 2, 'piid': 3},        # 模式
-                'fan_speed': {'siid': 2, 'piid': 4},   # 风速
+            from mijiaAPI import mijiaDevice
+            dev = mijiaDevice(self.api, did=did)
+
+            # 获取设备信息以找到正确的属性名
+            info = dev.get_device_info()
+            if not info or 'services' not in info:
+                print(f"无法获取设备信息: {did}")
+                return False
+
+            # 属性名映射：通用名称 -> MIOT属性名
+            prop_name_map = {
+                'power': ['switch', 'power', 'on'],
+                'temperature': ['target-temperature', 'temperature', 'temp'],
+                'mode': ['mode', 'work-mode'],
+                'fan_speed': ['fan-level', 'fan-speed', 'wind-level', 'wind-speed'],
             }
 
-            prop = property_map.get(property_name)
-            if not prop:
-                print(f"未知属性: {property_name}")
-                return False
-
-            # 转换值为小米API格式
-            if property_name == 'power':
-                value = True if value else False
-            elif property_name == 'temperature':
-                # 有些空调需要float，有些需要int，尝试float
-                value = float(value)
-            elif property_name == 'mode':
-                mode_map = {'cool': 0, 'heat': 1, 'dry': 2, 'fan': 3, 'auto': 4}
-                value = mode_map.get(value, 4)
+            # 转换值为设备可接受的格式
+            if property_name == 'mode':
+                mode_value_map = {'cool': 1, 'heat': 2, 'dry': 3, 'fan': 4, 'auto': 0}
+                value = mode_value_map.get(value, 0)
             elif property_name == 'fan_speed':
-                fan_map = {'auto': 0, 'low': 1, 'medium': 2, 'high': 3, 'strong': 4}
-                value = fan_map.get(value, 0)
+                fan_value_map = {'auto': 0, 'low': 1, 'medium': 2, 'high': 3, 'strong': 4}
+                value = fan_value_map.get(value, 0)
 
-            result = self.api.set_devices_prop({
-                "did": did,
-                "siid": prop['siid'],
-                "piid": prop['piid'],
-                "value": value
-            })
+            # 在设备服务中查找匹配的属性
+            target_props = prop_name_map.get(property_name, [property_name])
 
-            if result.get('code') == 0:
-                print(f"设置成功: {property_name} = {value}")
-                return True
-            else:
-                code = result.get('code')
-                msg = result.get('message', '未知错误')
-                error_map = {
-                    -704220043: '值超出范围',
-                    -704030023: '该属性不支持设置',
-                    -704220025: '设备离线',
-                    -704220035: '属性不存在',
-                }
-                error_desc = error_map.get(code, msg)
-                print(f"设置失败: {property_name} = {value}, 错误码: {code}, {error_desc}")
-                return False
+            for service in info['services']:
+                for prop in service.get('properties', []):
+                    prop_type = prop.get('type', '').lower()
+                    prop_desc = (prop.get('description') or '').lower()
+
+                    # 检查是否匹配目标属性
+                    for target in target_props:
+                        if target.lower() in prop_type or target.lower() in prop_desc:
+                            # 检查是否可写
+                            access = prop.get('access', [])
+                            if 'write' not in access and 2 not in access:
+                                print(f"属性 {prop_type} 不可写")
+                                continue
+
+                            # 设置属性值
+                            try:
+                                dev.set(prop_type, value)
+                                print(f"设置成功: {prop_type} = {value}")
+                                return True
+                            except Exception as e:
+                                print(f"设置属性失败: {e}")
+                                continue
+
+            print(f"未找到可写的属性: {property_name}")
+            return False
 
         except Exception as e:
             print(f"设置空调属性失败: {e}")
@@ -298,37 +302,48 @@ class MijiaClient:
 
         result = {}
         try:
-            # 获取开关状态
-            power_res = self.api.get_devices_prop({
-                "did": did, "siid": 2, "piid": 1
-            })
-            if power_res.get('code') == 0:
-                result['power'] = power_res.get('value', False)
+            from mijiaAPI import mijiaDevice
+            dev = mijiaDevice(self.api, did=did)
+            info = dev.get_device_info()
 
-            # 获取温度设定
-            temp_res = self.api.get_devices_prop({
-                "did": did, "siid": 2, "piid": 2
-            })
-            if temp_res.get('code') == 0:
-                result['temperature'] = temp_res.get('value', 26)
+            if not info or 'services' not in info:
+                return None
 
-            # 获取模式
-            mode_res = self.api.get_devices_prop({
-                "did": did, "siid": 2, "piid": 3
-            })
-            if mode_res.get('code') == 0:
-                mode_val = mode_res.get('value', 4)
-                mode_map = {0: 'cool', 1: 'heat', 2: 'dry', 3: 'fan', 4: 'auto'}
-                result['mode'] = mode_map.get(mode_val, 'auto')
+            # 属性名映射
+            prop_map = {
+                'power': ['switch', 'power', 'on'],
+                'temperature': ['target-temperature', 'temperature', 'temp'],
+                'mode': ['mode', 'work-mode'],
+                'fan_speed': ['fan-level', 'fan-speed', 'wind-level', 'wind-speed'],
+            }
 
-            # 获取风速
-            fan_res = self.api.get_devices_prop({
-                "did": did, "siid": 2, "piid": 4
-            })
-            if fan_res.get('code') == 0:
-                fan_val = fan_res.get('value', 0)
-                fan_map = {0: 'auto', 1: 'low', 2: 'medium', 3: 'high', 4: 'strong'}
-                result['fan_speed'] = fan_map.get(fan_val, 'auto')
+            # 尝试读取各个属性
+            for key, names in prop_map.items():
+                for service in info['services']:
+                    for prop in service.get('properties', []):
+                        prop_type = prop.get('type', '').lower()
+                        for name in names:
+                            if name.lower() in prop_type:
+                                try:
+                                    value = dev.get(prop_type)
+                                    # 转换值为通用格式
+                                    if key == 'mode':
+                                        mode_map = {0: 'auto', 1: 'cool', 2: 'heat', 3: 'dry', 4: 'fan', 5: 'auto'}
+                                        result[key] = mode_map.get(value, 'auto')
+                                    elif key == 'fan_speed':
+                                        fan_map = {0: 'auto', 1: 'low', 2: 'medium', 3: 'high', 4: 'strong'}
+                                        result[key] = fan_map.get(value, 'auto')
+                                    elif key == 'temperature':
+                                        result[key] = int(value) if value else 26
+                                    else:
+                                        result[key] = value
+                                    break
+                                except:
+                                    pass
+                        if key in result:
+                            break
+                    if key in result:
+                        break
 
             return result if result else None
 
