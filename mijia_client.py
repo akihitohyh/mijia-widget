@@ -343,16 +343,16 @@ class MijiaClient:
 
             keywords = prop_keywords.get(property_name, [property_name])
 
+            # 首先尝试规格中的地址
             for service in spec['services']:
                 siid = service.get('iid')
                 for prop in service.get('properties', []):
                     prop_type = prop.get('type', '').lower()
-                    prop_desc = (prop.get('description') or '').lower()
                     piid = prop.get('iid')
                     access = prop.get('access', [])
 
                     for keyword in keywords:
-                        if keyword.lower() in prop_type or keyword.lower() in prop_desc:
+                        if keyword.lower() in prop_type:
                             if 2 not in access:  # 检查是否可写
                                 continue
 
@@ -372,6 +372,24 @@ class MijiaClient:
                                     print(f"设置失败: {result.get('message', result)}")
                             except Exception as e:
                                 print(f"设置属性失败: {e}")
+
+            # 如果规格中的地址失败，尝试枚举常见地址
+            if property_name == 'temperature':
+                # 尝试 siid=3 的温度设置 (某些型号)
+                for test_siid in [3, 4, 5]:
+                    for test_piid in [1, 2, 3, 4, 5]:
+                        try:
+                            result = self.api.set_devices_prop({
+                                "did": did,
+                                "siid": test_siid,
+                                "piid": test_piid,
+                                "value": float(value)
+                            })
+                            if result.get('code') == 0:
+                                print(f"找到正确地址: siid={test_siid}, piid={test_piid}")
+                                return True
+                        except:
+                            pass
 
             print(f"未找到可写的属性: {property_name}")
             return False
