@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 import json
 import os
 import time
+import requests
 
 
 class MijiaClient:
@@ -15,6 +16,25 @@ class MijiaClient:
         self.auth_file = auth_file or os.path.expanduser("~/.config/mijia-api/auth.json")
         self.api: Optional[mijiaAPI] = None
         self._devices_cache: List[Dict] = []
+        self._spec_cache: Dict[str, Dict] = {}  # 缓存设备规格
+
+    def _get_device_spec(self, model: str) -> Optional[Dict]:
+        """从 home.miot-spec.com 获取设备MIOT规格"""
+        if model in self._spec_cache:
+            return self._spec_cache[model]
+
+        try:
+            url = f"https://home.miot-spec.com/spec/{model}"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.0'
+            }
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                self._spec_cache[model] = response.json()
+                return self._spec_cache[model]
+        except Exception as e:
+            print(f"获取设备规格失败: {e}")
+        return None
 
     def connect(self) -> bool:
         """连接并登录米家账号"""
@@ -217,29 +237,31 @@ class MijiaClient:
 
         return result if result else None
 
+    def _get_device_model(self, did: str) -> Optional[str]:
+        """根据did获取设备model"""
+        devices = self.get_devices()
+        for device in devices:
+            if device.get('did') == did:
+                return device.get('model')
+        return None
+
     def set_ac_property(self, did: str, property_name: str, value) -> bool:
-        """设置空调属性（开关、温度、模式、风速）
-
-        Args:
-            did: 设备ID
-            property_name: 属性名 ('power', 'temperature', 'mode', 'fan_speed')
-            value: 属性值
-
-        Returns:
-            bool: 是否设置成功
-        """
+        """设置空调属性（开关、温度、模式、风速）"""
         if not self.api:
             print("API未初始化")
             return False
 
         try:
-            from mijiaAPI import mijiaDevice
-            dev = mijiaDevice(self.api, did=did)
+            # 获取设备model
+            model = self._get_device_model(did)
+            if not model:
+                print(f"找不到设备: {did}")
+                return False
 
-            # 获取设备信息以找到正确的 siid/piid
-            info = dev.get_device_info()
-            if not info or 'services' not in info:
-                print(f"无法获取设备信息: {did}")
+            # 获取设备规格
+            spec = self._get_device_spec(model)
+            if not spec or 'services' not in spec:
+                print(f"无法获取设备规格: {model}")
                 return False
 
             # 属性名映射：通用名称 -> 可能的关键词
@@ -262,25 +284,21 @@ class MijiaClient:
                 fan_value_map = {'auto': 0, 'low': 1, 'medium': 2, 'high': 3, 'strong': 4}
                 value = fan_value_map.get(value, 0)
 
-            # 在设备服务中查找匹配的属性
             keywords = prop_keywords.get(property_name, [property_name])
 
-            for service in info['services']:
-                siid = service.get('siid')
+            for service in spec['services']:
+                siid = service.get('iid')
                 for prop in service.get('properties', []):
                     prop_type = prop.get('type', '').lower()
                     prop_desc = (prop.get('description') or '').lower()
-                    piid = prop.get('piid')
+                    piid = prop.get('iid')
                     access = prop.get('access', [])
 
-                    # 检查是否匹配目标属性
                     for keyword in keywords:
                         if keyword.lower() in prop_type or keyword.lower() in prop_desc:
-                            # 检查是否可写 (access包含2表示可写)
-                            if 2 not in access:
+                            if 2 not in access:  # 检查是否可写
                                 continue
 
-                            # 使用底层API设置属性
                             try:
                                 result = self.api.set_devices_prop({
                                     "did": did,
@@ -290,14 +308,12 @@ class MijiaClient:
                                 })
 
                                 if result.get('code') == 0:
-                                    print(f"设置成功: {prop_type} = {value}")
+                                    print(f"设置成功: {property_name} = {value}")
                                     return True
                                 else:
                                     print(f"设置失败: {result.get('message', result)}")
-                                    continue
                             except Exception as e:
                                 print(f"设置属性失败: {e}")
-                                continue
 
             print(f"未找到可写的属性: {property_name}")
             return False
@@ -307,24 +323,21 @@ class MijiaClient:
             return False
 
     def get_ac_status(self, did: str) -> Optional[Dict[str, Any]]:
-        """获取空调当前状态
-
-        Returns:
-            dict: 包含power(开关), temperature(温度), mode(模式), fan_speed(风速)
-        """
+        """获取空调当前状态"""
         if not self.api:
             return None
 
-        result = {}
         try:
-            from mijiaAPI import mijiaDevice
-            dev = mijiaDevice(self.api, did=did)
-            info = dev.get_device_info()
-
-            if not info or 'services' not in info:
+            # 获取设备model
+            model = self._get_device_model(did)
+            if not model:
                 return None
 
-            # 属性名映射
+            # 获取设备规格
+            spec = self._get_device_spec(model)
+            if not spec or 'services' not in spec:
+                return None
+
             prop_map = {
                 'power': ['switch', 'power', 'on'],
                 'temperature': ['target-temperature', 'temperature', 'temp'],
@@ -332,18 +345,17 @@ class MijiaClient:
                 'fan_speed': ['fan-level', 'fan-speed', 'wind-level', 'wind-speed'],
             }
 
-            # 尝试读取各个属性
+            result = {}
             for key, names in prop_map.items():
-                for service in info['services']:
-                    siid = service.get('siid')
+                for service in spec['services']:
+                    siid = service.get('iid')
                     for prop in service.get('properties', []):
                         prop_type = prop.get('type', '').lower()
-                        piid = prop.get('piid')
+                        piid = prop.get('iid')
 
                         for name in names:
                             if name.lower() in prop_type:
                                 try:
-                                    # 使用底层API读取属性
                                     res = self.api.get_devices_prop({
                                         "did": did,
                                         "siid": siid,
@@ -352,7 +364,6 @@ class MijiaClient:
 
                                     if res.get('code') == 0:
                                         value = res.get('value')
-                                        # 转换值为通用格式
                                         if key == 'mode':
                                             mode_map = {0: 'auto', 1: 'cool', 2: 'heat', 3: 'dry', 4: 'fan'}
                                             result[key] = mode_map.get(value, 'auto')
