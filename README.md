@@ -2,6 +2,8 @@
 
 一个基于 PyQt6 的 Windows 桌面小插件，用于显示米家账号下的所有设备状态和智能插座用电信息。
 
+> **特别感谢**：[mijia-api](https://github.com/Do1e/mijia-api) 项目提供的米家API接口支持
+
 ## 功能特性
 
 - 🔗 自动同步米家账号设备
@@ -15,7 +17,7 @@
 - 👁️ 点击穿透模式（鼠标穿透窗口操作桌面）
 - 📌 窗口置顶显示
 - 🔔 系统托盘图标支持
-- 📱 图形化扫码登录/退出登录
+- 📱 图形化扫码登录/退出登录(实验中)
 
 ## 系统要求
 
@@ -44,11 +46,11 @@
 |--------|------|------|
 | pyinstaller | >=6.0 | 打包为exe |
 
-## 安装步骤
+## 快速开始
 
-### 方式一：Python源码运行（推荐）
+### 只需3步
 
-1. **克隆或下载项目**
+1. **克隆项目**
    ```bash
    git clone https://github.com/akihitohyh/mijia-widget.git
    cd mijia-widget
@@ -57,22 +59,11 @@
 2. **安装依赖**
    ```bash
    pip install -r requirements.txt
-   # 或手动安装
-   pip install mijiaAPI>=3.0.0 PyQt6>=6.4.0 qasync>=0.23.0 qrcode>=7.0 pillow>=9.0
    ```
 
-3. **首次登录米家账号**
-   ```bash
-   mijiaAPI --login
-   ```
-   按提示扫描二维码，用米家APP扫描完成登录。
+3. **双击 `启动插件.bat`**
 
-4. **启动插件**
-   ```bash
-   python main_widget.py
-   # 或双击运行
-   start.bat
-   ```
+   > ✅ **搞定！** 首次运行会自动引导登录，之后一键启动。
 
 ### 方式二：EXE试用版（实验性）
 
