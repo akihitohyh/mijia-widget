@@ -18,26 +18,50 @@ class MijiaClient:
         self._spec_cache: Dict[str, Dict] = {}  # 缓存设备规格
 
     # 常见空调型号的MIOT规格 (从 home.miot-spec.com 获取)
+    # 注意：不同型号可能使用不同的 siid/piid
     AC_SPECS = {
-        # 小米空调 巨省电 1.5匹
+        # 小米空调 巨省电 1.5匹 (xiaomi.airc.h09r00)
         'xiaomi.airc.h09r00': {
             'services': [
                 {
-                    'iid': 2,  # siid
+                    'iid': 2,  # siid=2 是空调主服务
                     'properties': [
-                        {'iid': 1, 'type': 'switch', 'access': [2]},  # piid=1, power, 可写
-                        {'iid': 2, 'type': 'target-temperature', 'access': [2]},  # piid=2, temp
-                        {'iid': 3, 'type': 'mode', 'access': [2]},  # piid=3, mode
-                        {'iid': 4, 'type': 'fan-level', 'access': [2]},  # piid=4, fan
+                        {'iid': 1, 'type': 'switch', 'access': [2]},           # power
+                        {'iid': 2, 'type': 'target-temperature', 'access': [2]},  # temp
+                        {'iid': 3, 'type': 'mode', 'access': [2]},             # mode
+                        {'iid': 4, 'type': 'fan-level', 'access': [2]},        # fan
                     ]
                 }
             ]
         },
-        # 通用空调规格 (大多数米家空调都类似)
+        # 备选规格 (有些型号使用 siid=3)
+        'xiaomi.airc.h09r00_alt': {
+            'services': [
+                {
+                    'iid': 3,  # siid=3
+                    'properties': [
+                        {'iid': 1, 'type': 'switch', 'access': [2]},
+                        {'iid': 2, 'type': 'target-temperature', 'access': [2]},
+                        {'iid': 3, 'type': 'mode', 'access': [2]},
+                        {'iid': 4, 'type': 'fan-level', 'access': [2]},
+                    ]
+                }
+            ]
+        },
+        # 通用空调规格
         'default_ac': {
             'services': [
                 {
                     'iid': 2,
+                    'properties': [
+                        {'iid': 1, 'type': 'switch', 'access': [2]},
+                        {'iid': 2, 'type': 'target-temperature', 'access': [2]},
+                        {'iid': 3, 'type': 'mode', 'access': [2]},
+                        {'iid': 4, 'type': 'fan-level', 'access': [2]},
+                    ]
+                },
+                {
+                    'iid': 3,  # 备选服务
                     'properties': [
                         {'iid': 1, 'type': 'switch', 'access': [2]},
                         {'iid': 2, 'type': 'target-temperature', 'access': [2]},
@@ -309,7 +333,7 @@ class MijiaClient:
             if property_name == 'power':
                 value = bool(value)
             elif property_name == 'temperature':
-                value = int(value)
+                value = float(value)  # 温度需要float
             elif property_name == 'mode':
                 mode_value_map = {'cool': 1, 'heat': 2, 'dry': 3, 'fan': 4, 'auto': 0}
                 value = mode_value_map.get(value, 0)
@@ -333,6 +357,7 @@ class MijiaClient:
                                 continue
 
                             try:
+                                print(f"尝试设置: siid={siid}, piid={piid}, value={value} (type={type(value).__name__})")
                                 result = self.api.set_devices_prop({
                                     "did": did,
                                     "siid": siid,
