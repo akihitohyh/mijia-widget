@@ -507,32 +507,8 @@ class MijiaClient:
                 except:
                     pass
 
-            # 获取今日用电统计
-            try:
-                import time
-                today_start = int(time.mktime(time.strptime(time.strftime('%Y-%m-%d'), '%Y-%m-%d')))
-                today_end = int(time.time())
-
-                # 尝试获取电量统计 (key格式: siid.piid)
-                stats = self.api.get_statistics({
-                    "did": did,
-                    "key": "11.1",  # 常见电量统计key
-                    "data_type": "stat_day_v3",
-                    "limit": 1,
-                    "time_start": today_start,
-                    "time_end": today_end
-                })
-
-                if stats and len(stats) > 0:
-                    today_value = stats[0].get('value')
-                    if today_value:
-                        try:
-                            today_energy = eval(today_value)[0]
-                            result['today_energy_kwh'] = round(today_energy / 100, 2)
-                        except:
-                            pass
-            except Exception as e:
-                print(f"获取空调用电统计失败: {e}")
+            # 空调通常不支持用电统计API，跳过此步骤
+            # 如果后续发现某些型号支持，可以在这里添加
 
             return result if result else None
 

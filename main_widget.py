@@ -1035,9 +1035,13 @@ class ACControlDialog(QDialog):
                 current_power = power_info.get('power_w', '--')
                 self.power_label.setText(f"⚡ 当前功率: {current_power}W")
 
-                # 今日用电
-                today_energy = power_info.get('today_energy_kwh', '--')
-                self.energy_label.setText(f"🔋 今日用电: {today_energy}度")
+                # 今日用电 (空调通常不支持)
+                today_energy = power_info.get('today_energy_kwh')
+                if today_energy is not None:
+                    self.energy_label.setText(f"🔋 今日用电: {today_energy}度")
+                    self.energy_label.show()
+                else:
+                    self.energy_label.hide()
 
                 self.status_label.setText("已连接")
             else:
