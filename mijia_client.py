@@ -251,7 +251,8 @@ class MijiaClient:
             if property_name == 'power':
                 value = True if value else False
             elif property_name == 'temperature':
-                value = int(value)
+                # 有些空调需要float，有些需要int，尝试float
+                value = float(value)
             elif property_name == 'mode':
                 mode_map = {'cool': 0, 'heat': 1, 'dry': 2, 'fan': 3, 'auto': 4}
                 value = mode_map.get(value, 4)
@@ -270,7 +271,16 @@ class MijiaClient:
                 print(f"设置成功: {property_name} = {value}")
                 return True
             else:
-                print(f"设置失败: {result}")
+                code = result.get('code')
+                msg = result.get('message', '未知错误')
+                error_map = {
+                    -704220043: '值超出范围',
+                    -704030023: '该属性不支持设置',
+                    -704220025: '设备离线',
+                    -704220035: '属性不存在',
+                }
+                error_desc = error_map.get(code, msg)
+                print(f"设置失败: {property_name} = {value}, 错误码: {code}, {error_desc}")
                 return False
 
         except Exception as e:
