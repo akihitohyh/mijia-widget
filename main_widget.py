@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QScrollArea, QFrame, QSizePolicy,
     QDialog, QGridLayout, QSizeGrip, QColorDialog,
     QFormLayout, QGroupBox, QCheckBox, QMessageBox,
-    QSystemTrayIcon, QMenu
+    QSystemTrayIcon, QMenu, QComboBox, QSlider
 )
 from PyQt6.QtCore import Qt, QTimer, QPoint, pyqtSignal, QPropertyAnimation, QEasingCurve, QMetaObject, Q_ARG
 from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap
