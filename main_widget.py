@@ -884,7 +884,8 @@ class DeviceCard(QFrame):
         if not self.client:
             return
         try:
-            status = self.client.get_ac_status(self.did)
+            did = self.device.get('did')
+            status = self.client.get_ac_status(did)
             if status and 'power' in status:
                 power = status['power']
                 if power:
@@ -904,13 +905,14 @@ class DeviceCard(QFrame):
         if not self.client:
             return
         try:
+            did = self.device.get('did')
             # 先获取当前状态
-            status = self.client.get_ac_status(self.did)
+            status = self.client.get_ac_status(did)
             current_power = status.get('power', False) if status else False
 
             # 切换状态
             new_power = not current_power
-            result = self.client.set_ac_property(self.did, 'power', new_power)
+            result = self.client.set_ac_property(did, 'power', new_power)
 
             if result:
                 # 更新显示
