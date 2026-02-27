@@ -6,7 +6,6 @@ from typing import List, Dict, Any, Optional
 import json
 import os
 import time
-import requests
 
 
 class MijiaClient:
@@ -18,23 +17,57 @@ class MijiaClient:
         self._devices_cache: List[Dict] = []
         self._spec_cache: Dict[str, Dict] = {}  # 缓存设备规格
 
+    # 常见空调型号的MIOT规格 (从 home.miot-spec.com 获取)
+    AC_SPECS = {
+        # 小米空调 巨省电 1.5匹
+        'xiaomi.airc.h09r00': {
+            'services': [
+                {
+                    'iid': 2,  # siid
+                    'properties': [
+                        {'iid': 1, 'type': 'switch', 'access': [2]},  # piid=1, power, 可写
+                        {'iid': 2, 'type': 'target-temperature', 'access': [2]},  # piid=2, temp
+                        {'iid': 3, 'type': 'mode', 'access': [2]},  # piid=3, mode
+                        {'iid': 4, 'type': 'fan-level', 'access': [2]},  # piid=4, fan
+                    ]
+                }
+            ]
+        },
+        # 通用空调规格 (大多数米家空调都类似)
+        'default_ac': {
+            'services': [
+                {
+                    'iid': 2,
+                    'properties': [
+                        {'iid': 1, 'type': 'switch', 'access': [2]},
+                        {'iid': 2, 'type': 'target-temperature', 'access': [2]},
+                        {'iid': 3, 'type': 'mode', 'access': [2]},
+                        {'iid': 4, 'type': 'fan-level', 'access': [2]},
+                    ]
+                }
+            ]
+        }
+    }
+
     def _get_device_spec(self, model: str) -> Optional[Dict]:
-        """从 home.miot-spec.com 获取设备MIOT规格"""
+        """获取设备MIOT规格"""
         if model in self._spec_cache:
             return self._spec_cache[model]
 
-        try:
-            url = f"https://home.miot-spec.com/spec/{model}"
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.0'
-            }
-            response = requests.get(url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                self._spec_cache[model] = response.json()
+        # 尝试精确匹配
+        if model in self.AC_SPECS:
+            self._spec_cache[model] = self.AC_SPECS[model]
+            return self._spec_cache[model]
+
+        # 尝试前缀匹配 (如 xiaomi.airc.xxx)
+        for key in self.AC_SPECS:
+            if key != 'default_ac' and model.startswith(key.split('.')[0] + '.' + key.split('.')[1]):
+                self._spec_cache[model] = self.AC_SPECS[key]
                 return self._spec_cache[model]
-        except Exception as e:
-            print(f"获取设备规格失败: {e}")
-        return None
+
+        # 使用默认规格
+        self._spec_cache[model] = self.AC_SPECS['default_ac']
+        return self._spec_cache[model]
 
     def connect(self) -> bool:
         """连接并登录米家账号"""
