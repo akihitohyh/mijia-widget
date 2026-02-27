@@ -463,3 +463,79 @@ class MijiaClient:
         except Exception as e:
             print(f"获取空调状态失败: {e}")
             return None
+
+    def get_ac_power_info(self, did: str) -> Optional[Dict[str, Any]]:
+        """获取空调用电信息（功率、室内温度、用电量）
+
+        Returns:
+            dict: 包含 power_w(功率W), room_temp(室内温度), today_energy_kwh(今日用电度数)
+        """
+        if not self.api:
+            return None
+
+        result = {}
+        try:
+            # 尝试获取功率 (常见地址 siid=4, piid=1 或 siid=11, piid=2)
+            for siid, piid in [(4, 1), (4, 2), (11, 1), (11, 2), (3, 1), (3, 2)]:
+                try:
+                    res = self.api.get_devices_prop({
+                        "did": did,
+                        "siid": siid,
+                        "piid": piid
+                    })
+                    if res.get('code') == 0:
+                        value = res.get('value')
+                        if value is not None and isinstance(value, (int, float)) and value >= 0:
+                            result['power_w'] = float(value)
+                            break
+                except:
+                    pass
+
+            # 尝试获取室内温度 (常见地址 siid=4, piid=2 或 siid=3, piid=4)
+            for siid, piid in [(4, 2), (4, 3), (3, 4), (3, 3), (2, 3)]:
+                try:
+                    res = self.api.get_devices_prop({
+                        "did": did,
+                        "siid": siid,
+                        "piid": piid
+                    })
+                    if res.get('code') == 0:
+                        value = res.get('value')
+                        if value is not None and isinstance(value, (int, float)) and 10 <= value <= 40:
+                            result['room_temp'] = int(value)
+                            break
+                except:
+                    pass
+
+            # 获取今日用电统计
+            try:
+                import time
+                today_start = int(time.mktime(time.strptime(time.strftime('%Y-%m-%d'), '%Y-%m-%d')))
+                today_end = int(time.time())
+
+                # 尝试获取电量统计 (key格式: siid.piid)
+                stats = self.api.get_statistics({
+                    "did": did,
+                    "key": "11.1",  # 常见电量统计key
+                    "data_type": "stat_day_v3",
+                    "limit": 1,
+                    "time_start": today_start,
+                    "time_end": today_end
+                })
+
+                if stats and len(stats) > 0:
+                    today_value = stats[0].get('value')
+                    if today_value:
+                        try:
+                            today_energy = eval(today_value)[0]
+                            result['today_energy_kwh'] = round(today_energy / 100, 2)
+                        except:
+                            pass
+            except Exception as e:
+                print(f"获取空调用电统计失败: {e}")
+
+            return result if result else None
+
+        except Exception as e:
+            print(f"获取空调用电信息失败: {e}")
+            return None

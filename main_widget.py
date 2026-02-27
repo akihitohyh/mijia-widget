@@ -878,7 +878,7 @@ class DeviceCard(QFrame):
 
 
 class ACControlDialog(QDialog):
-    """空调控制对话框"""
+    """空调控制对话框 - 简化版，只保留开关和状态显示"""
 
     def __init__(self, device: Dict, client: MijiaClient, parent=None):
         super().__init__(parent)
@@ -886,9 +886,10 @@ class ACControlDialog(QDialog):
         self.client = client
         self.did = device.get('did', '')
 
+        # 使用设备全名
         display_name = get_device_display_name(device.get('name', '空调'))
         self.setWindowTitle(f"{display_name} - 控制面板")
-        self.setFixedSize(280, 350)
+        self.setFixedSize(300, 280)
 
         self.setWindowFlags(
             Qt.WindowType.Dialog |
@@ -924,9 +925,9 @@ class ACControlDialog(QDialog):
             }}
             QPushButton#powerBtn {{
                 background-color: #4caf50;
-                font-size: 14px;
+                font-size: 16px;
                 font-weight: bold;
-                padding: 10px 20px;
+                padding: 15px 30px;
             }}
             QPushButton#powerBtn:hover {{
                 background-color: #45a049;
@@ -937,85 +938,62 @@ class ACControlDialog(QDialog):
             QPushButton#powerBtn[off="true"]:hover {{
                 background-color: #da190b;
             }}
-            QSlider::groove:horizontal {{
-                height: 8px;
-                background: {STYLE['card_bg']};
-                border-radius: 4px;
-            }}
-            QSlider::handle:horizontal {{
-                background: {STYLE['accent_color']};
-                width: 18px;
-                border-radius: 9px;
-            }}
-            QComboBox {{
-                background-color: {STYLE['card_bg']};
-                color: {STYLE['text_color']};
-                border: 1px solid {STYLE['accent_color']};
-                border-radius: 5px;
-                padding: 5px;
-            }}
         """)
 
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        # 标题
-        title = QLabel("❄️ 空调控制")
-        title.setFont(QFont(STYLE['font_family'], 16, QFont.Weight.Bold))
+        # 标题 - 使用全名
+        name = self.device.get('name', '空调')
+        title = QLabel(f"❄️ {get_device_display_name(name)}")
+        title.setFont(QFont(STYLE['font_family'], 14, QFont.Weight.Bold))
         title.setStyleSheet(f"color: {STYLE['accent_color']};")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setWordWrap(True)
         layout.addWidget(title)
 
+        # 状态显示区域
+        status_frame = QFrame()
+        status_frame.setStyleSheet(f"""
+            QFrame {{
+                background-color: {STYLE['card_bg']};
+                border-radius: 8px;
+                padding: 10px;
+            }}
+        """)
+        status_layout = QVBoxLayout(status_frame)
+        status_layout.setSpacing(8)
+
+        # 当前温度
+        self.room_temp_label = QLabel("🌡️ 室内温度: --°C")
+        self.room_temp_label.setFont(QFont(STYLE['font_family'], 12))
+        status_layout.addWidget(self.room_temp_label)
+
+        # 目标温度
+        self.target_temp_label = QLabel("🎯 目标温度: --°C")
+        self.target_temp_label.setFont(QFont(STYLE['font_family'], 12))
+        status_layout.addWidget(self.target_temp_label)
+
+        # 当前功率
+        self.power_label = QLabel("⚡ 当前功率: --W")
+        self.power_label.setFont(QFont(STYLE['font_family'], 12))
+        status_layout.addWidget(self.power_label)
+
+        # 今日用电
+        self.energy_label = QLabel("🔋 今日用电: --度")
+        self.energy_label.setFont(QFont(STYLE['font_family'], 12))
+        status_layout.addWidget(self.energy_label)
+
+        layout.addWidget(status_frame)
+
         # 电源按钮
-        self.power_btn = QPushButton("🔌 电源")
+        self.power_btn = QPushButton("🔌 电源 (开)")
         self.power_btn.setObjectName("powerBtn")
         self.power_btn.clicked.connect(self.toggle_power)
         layout.addWidget(self.power_btn)
 
-        # 温度控制
-        temp_layout = QHBoxLayout()
-        temp_label = QLabel("温度:")
-        temp_layout.addWidget(temp_label)
-
-        self.temp_slider = QSlider(Qt.Orientation.Horizontal)
-        self.temp_slider.setMinimum(16)
-        self.temp_slider.setMaximum(30)
-        self.temp_slider.setValue(26)
-        self.temp_slider.valueChanged.connect(self.on_temp_changed)
-        temp_layout.addWidget(self.temp_slider)
-
-        self.temp_display = QLabel("26°C")
-        self.temp_display.setFixedWidth(40)
-        temp_layout.addWidget(self.temp_display)
-
-        layout.addLayout(temp_layout)
-
-        # 模式选择
-        mode_layout = QHBoxLayout()
-        mode_label = QLabel("模式:")
-        mode_layout.addWidget(mode_label)
-
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItems(["制冷", "制热", "除湿", "送风", "自动"])
-        self.mode_combo.currentTextChanged.connect(self.on_mode_changed)
-        mode_layout.addWidget(self.mode_combo)
-
-        layout.addLayout(mode_layout)
-
-        # 风速选择
-        fan_layout = QHBoxLayout()
-        fan_label = QLabel("风速:")
-        fan_layout.addWidget(fan_label)
-
-        self.fan_combo = QComboBox()
-        self.fan_combo.addItems(["自动", "低风", "中风", "高风", "强力"])
-        self.fan_combo.currentTextChanged.connect(self.on_fan_changed)
-        fan_layout.addWidget(self.fan_combo)
-
-        layout.addLayout(fan_layout)
-
-        # 状态显示
+        # 状态提示
         self.status_label = QLabel("正在获取状态...")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status_label.setStyleSheet(f"color: {STYLE['accent_color']}; font-size: 11px;")
@@ -1031,9 +1009,9 @@ class ACControlDialog(QDialog):
     def load_status(self):
         """加载空调当前状态"""
         try:
+            # 获取电源状态
             status = self.client.get_ac_status(self.did)
             if status:
-                # 更新电源按钮
                 power = status.get('power', False)
                 if power:
                     self.power_btn.setProperty("off", "false")
@@ -1042,60 +1020,37 @@ class ACControlDialog(QDialog):
                     self.power_btn.setProperty("off", "true")
                     self.power_btn.setText("🔌 电源 (关)")
 
-                # 更新温度
-                temp = status.get('temperature', 26)
-                self.temp_slider.setValue(temp)
-                self.temp_display.setText(f"{temp}°C")
+                # 显示目标温度
+                target_temp = status.get('temperature', '--')
+                self.target_temp_label.setText(f"🎯 目标温度: {target_temp}°C")
 
-                # 更新模式
-                mode = status.get('mode', 'auto')
-                mode_map_rev = {'cool': '制冷', 'heat': '制热', 'dry': '除湿', 'fan': '送风', 'auto': '自动'}
-                self.mode_combo.setCurrentText(mode_map_rev.get(mode, '自动'))
+            # 获取用电信息
+            power_info = self.client.get_ac_power_info(self.did)
+            if power_info:
+                # 室内温度
+                room_temp = power_info.get('room_temp', '--')
+                self.room_temp_label.setText(f"🌡️ 室内温度: {room_temp}°C")
 
-                # 更新风速
-                fan = status.get('fan_speed', 'auto')
-                fan_map_rev = {'auto': '自动', 'low': '低风', 'medium': '中风', 'high': '高风', 'strong': '强力'}
-                self.fan_combo.setCurrentText(fan_map_rev.get(fan, '自动'))
+                # 功率
+                current_power = power_info.get('power_w', '--')
+                self.power_label.setText(f"⚡ 当前功率: {current_power}W")
 
-                self.status_label.setText("已连接 - 同步成功")
+                # 今日用电
+                today_energy = power_info.get('today_energy_kwh', '--')
+                self.energy_label.setText(f"🔋 今日用电: {today_energy}度")
+
+                self.status_label.setText("已连接")
             else:
-                self.status_label.setText("已连接 - 使用默认设置")
+                self.status_label.setText("部分数据获取失败")
+
+            self.power_btn.style().unpolish(self.power_btn)
+            self.power_btn.style().polish(self.power_btn)
+
         except Exception as e:
             self.status_label.setText(f"获取状态失败: {str(e)[:30]}")
 
-    def on_temp_changed(self, value):
-        """温度改变"""
-        self.temp_display.setText(f"{value}°C")
-        # 发送温度设置命令
-        self.set_ac_property('temperature', value)
-
-    def on_mode_changed(self, mode_text):
-        """模式改变"""
-        mode_map = {
-            "制冷": "cool",
-            "制热": "heat",
-            "除湿": "dry",
-            "送风": "fan",
-            "自动": "auto"
-        }
-        mode = mode_map.get(mode_text, "auto")
-        self.set_ac_property('mode', mode)
-
-    def on_fan_changed(self, fan_text):
-        """风速改变"""
-        fan_map = {
-            "自动": "auto",
-            "低风": "low",
-            "中风": "medium",
-            "高风": "high",
-            "强力": "strong"
-        }
-        fan = fan_map.get(fan_text, "auto")
-        self.set_ac_property('fan_speed', fan)
-
     def toggle_power(self):
         """切换电源"""
-        # 这里可以添加电源切换逻辑
         current_state = self.power_btn.property("off")
         if current_state == "true":
             self.power_btn.setProperty("off", "false")

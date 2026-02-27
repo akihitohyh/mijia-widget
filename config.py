@@ -96,6 +96,7 @@ DEVICE_NAME_MAP = {
     'Air Conditioner': '空调',
     'Xiaomi Air Conditioner': '小米空调',
     'Mi Air Conditioner': '米家空调',
+    'Air Conditioner(1.5 HP/New China Energy Label 1)': '小米空调巨省电1.5匹',
 }
 
 def get_device_display_name(name: str) -> str:
