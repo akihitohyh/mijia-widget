@@ -1,0 +1,9 @@
+# 运行依赖
+mijiaAPI>=3.0.0
+PyQt6>=6.4.0
+qasync>=0.23.0
+qrcode>=7.0
+pillow>=9.0
+
+# 打包依赖（可选）
+# pyinstaller>=6.0
